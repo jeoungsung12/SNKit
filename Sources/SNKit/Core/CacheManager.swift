@@ -14,10 +14,27 @@ struct CacheableImage: Cacheable {
     let imageURL: URL
     let identifier: String
     
-    init(imageURL: URL) {
+    public init(imageURL: URL, identifier: String? = nil) {
         self.imageURL = imageURL
-        self.identifier = imageURL.absoluteString
+        self.identifier = identifier ?? imageURL.absoluteString
         self.image = nil
+    }
+    
+    public init(image: UIImage, imageURL: URL, identifier: String? = nil) {
+        self.image = image
+        self.imageURL = imageURL
+        self.identifier = identifier ?? imageURL.absoluteString
+    }
+}
+
+public final class CacheManager {
+    
+    func store(with cachable: Cacheable) {
+        
+    }
+    
+    func retrieveImage(with identifier: String) -> UIImage? {
+        
     }
 }
 
