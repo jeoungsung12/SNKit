@@ -27,6 +27,7 @@ final class ImageDownloader {
             completion(cachedImage)
             return
         }
+        
         //캐시 Miss -> 데이터 통신으로 이미지 로드 후 반환
         let task = session.dataTask(with: url) { [weak self] data, response, error in
             guard let data = data,
@@ -41,7 +42,7 @@ final class ImageDownloader {
             
             //가져온 이미지를 캐시에 저장
             let cacheable = CacheableImage(image: image, imageURL: url)
-            self?.cacheManager.store(with: cacheable)
+            self?.cacheManager.storeImage(with: cacheable)
             
             DispatchQueue.main.async {
                 completion(image)

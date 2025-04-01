@@ -28,56 +28,58 @@ struct CacheableImage: Cacheable {
 }
 
 public final class CacheManager {
+    private let memoryCache: MemoryCache
+    private let diskCache: DiskCache
     
-    func store(with cachable: Cacheable) {
+    init(configuration: Configuration) {
+        self.memoryCache = MemoryCache(capacity: configuration.memoryCacheCapacity)
+        self.diskCache = DiskCache(
+            directory: configuration.cacheDirectory,
+            capacity: configuration.diskCacheCapacity,
+            expirationInterval: configuration.expirationInterval
+        )
+    }
+    
+    func storeImage(with cachable: Cacheable) {
+        //TODO: 옵션에 따라 처리
+        memoryCache.store(cachable)
         
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            //TODO: Sendable?
+            self?.diskCache.store(cachable)
+        }
     }
     
     func retrieveImage(with identifier: String) -> UIImage? {
+        //1. 메모리 캐시 Hit
+        if let image = memoryCache.retrieve(with: identifier) {
+            return image
+        }
         
+        //2. 디스크 캐시 Hit
+        if let image = diskCache.retrieve(with: identifier) {
+            //메모리 캐시에도 저장해야하는가? or 바로 반환
+            return image
+        }
+        
+        return nil
+    }
+    
+    func removeImage(with identifier: String) {
+        //1. 메모리 캐시 삭제
+        memoryCache.remove(with: identifier)
+        
+        //2. 디스크 캐시 삭제
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.diskCache.remove(with: identifier)
+        }
+    }
+    
+    func clearCache() {
+        //메모리, 디스크 모두 삭제
+        memoryCache.removeAll()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.diskCache.removeAll()
+        }
     }
 }
-
-//public protocol CacheManagerType {
-//    func load(url: NSURL, item: Cacheable, completion: @escaping (Cacheable,UIImage?) -> Void)
-//}
-//
-//public final class CacheManager: CacheManagerType {
-//    
-//    //캐시 옵션(메모리, 디스크, 하이브리드)
-//    @frozen
-//    public enum ImageCacheOption {
-//        case memory
-//        case disk
-//        case hybrid //memory + disk
-//    }
-//    
-//    @MainActor
-//    static let shared = CacheManager()
-//    private init() { }
-//    
-//    private let memoryCache = NSCache<NSURL, UIImage>()
-//    //    private let diskCache =
-//    
-//    private final func image(url: NSURL) -> UIImage? {
-//        //메모리 캐시에 존재하면(key=NSURL) -> Image 반환
-//        return memoryCache.object(forKey: url)
-//    }
-//    
-//    //캐시에서 이미지 Hit를 확인해 -> 반환(없을 경우 통신으로 로드)
-//    //메모리 캐시 확인 -> 디스크 캐시 확인 -> 없을 경우 데이터 통신
-//    public final func load(url: NSURL, item: Cacheable, completion: @escaping (Cacheable,UIImage?) -> Void) {
-//        //1. 메모리 캐시 Hit -> 캐시에 저장된 이미지 반환
-//        if let memoryCachedImage = self.image(url: url) {
-//            completion(item, memoryCachedImage)
-//            return
-//        }
-//        
-//        //2. 디스크 캐시 Hit
-//        
-//        //3. 데이터 통신으로 이미지 로드 후 반환
-//        
-//        
-//    }
-//    
-//}
