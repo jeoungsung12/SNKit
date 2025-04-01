@@ -7,12 +7,4 @@
 
 import Foundation
 
-//스토리지 만료 옵션
-public enum StorageExpirationOptions {
-    case never
-    case days(Int)
-    case date(Date)
-    case expired
-    
-    
-}
+//TODO: 하이브리드 캐시 구현
