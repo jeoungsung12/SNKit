@@ -7,4 +7,22 @@
 
 import Foundation
 
-//TODO: 캐시 설정 (정책, 옵션) 등
+public struct Configuration {
+    public let memoryCacheCapacity: Int
+    public let diskCacheCapacity: Int
+    public let expirationPolicy: ExpirationPolicy
+    public let cacheDirectory: URL?
+    
+    public init(
+        memoryCacheCapacity: Int = 50_000_000,
+        diskCacheCapacity: Int = 100_000_000,
+        // 기본값 7일 만료
+        expirationPolicy: ExpirationPolicy = ExpirationPolicy(rule: .days(7)),
+        cacheDirectory: URL? = nil
+    ) {
+        self.memoryCacheCapacity = memoryCacheCapacity
+        self.diskCacheCapacity = diskCacheCapacity
+        self.expirationPolicy = expirationPolicy
+        self.cacheDirectory = cacheDirectory
+    }
+}
