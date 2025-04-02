@@ -30,6 +30,7 @@ struct CacheableImage: Cacheable {
 public final class CacheManager {
     private let memoryCache: MemoryCache
     private let diskCache: DiskCache
+    private let hybridCache: HybridCache
     
     init(configuration: Configuration) {
         self.memoryCache = MemoryCache(capacity: configuration.memoryCacheCapacity)
@@ -37,6 +38,10 @@ public final class CacheManager {
             directory: configuration.cacheDirectory,
             capacity: configuration.diskCacheCapacity,
             expirationInterval: configuration.expirationInterval
+        )
+        self.hybridCache = HybridCache(
+            memoryCache: self.memoryCache,
+            diskCache: self.diskCache
         )
     }
     
@@ -48,9 +53,13 @@ public final class CacheManager {
             //TODO: Sendable?
             self?.diskCache.store(cachable)
         }
+        
+        //하이브리드 캐시일때?
     }
     
     func retrieveImage(with identifier: String) -> UIImage? {
+        //TODO: 옵션에 따라 처리
+        
         //1. 메모리 캐시 Hit
         if let image = memoryCache.retrieve(with: identifier) {
             return image
@@ -61,6 +70,8 @@ public final class CacheManager {
             //메모리 캐시에도 저장해야하는가? or 바로 반환
             return image
         }
+        
+        //하이브리드일때!
         
         return nil
     }
@@ -73,6 +84,8 @@ public final class CacheManager {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             self?.diskCache.remove(with: identifier)
         }
+        
+        //하이브리드일때
     }
     
     func clearCache() {
