@@ -57,6 +57,19 @@ imageView.snSetImage(with: imageURL, cacheOption: .eTagValidation)
 imageView.snSetImage(with: imageURL, cacheOption: .forceDownload)
 ```
 
+### 저장 옵션 설정
+```swift
+// 메모리
+imageView.snSetImage(with: url, storageOption: .memory)
+
+// 디스크
+imageView.snSetImage(with: url, storageOption: .disk)
+
+// 하이브리드
+imageView.snSetImage(with: url, storageOption: .hybrid)
+```
+
+
 ### 이미지 처리 옵션
 
 ```swift
