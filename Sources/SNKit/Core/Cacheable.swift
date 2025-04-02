@@ -12,5 +12,6 @@ public protocol Cacheable: Sendable {
     var image: UIImage? { get set }
     var imageURL: URL { get }
     var identifier: String { get }
+    var eTag: String? { get }
 }
 

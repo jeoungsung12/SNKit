@@ -16,6 +16,7 @@ public enum CacheOption {
 final class ImageDownloader: @unchecked Sendable {
     private let session: URLSession
     private let cacheManager: CacheManager
+    private let eTagHandler: ETagHandler
     
     init(
         session: URLSession,
@@ -23,9 +24,14 @@ final class ImageDownloader: @unchecked Sendable {
     ) {
         self.session = session
         self.cacheManager = cacheManager
+        self.eTagHandler = ETagHandler(session: session, cacheManager: cacheManager)
     }
     
-    func downloadImage(with url: URL, option: CacheOption = .cacheFirst , completion: @escaping (UIImage?) -> Void) {
+    func downloadImage(
+        with url: URL,
+        option: CacheOption = .cacheFirst ,
+        completion: @escaping @Sendable (UIImage?) -> Void
+    ) {
         //캐시 확인
         let identifier = url.absoluteString
         switch option {
@@ -38,38 +44,55 @@ final class ImageDownloader: @unchecked Sendable {
             downloadAndCacheImage(with: url, identifier: identifier, completion: completion)
         case .eTagValidation:
             //TODO: Etag 검증, 캐시 Hit -> Etag 확인, 없으면 그냥 다운
-            if let cacheImage = cacheManager.retrieveImage(with: identifier) {
-                
+            if let cachedImage = cacheManager.retrieveImage(with: identifier),
+               let cachedETag = cacheManager.retrieveETag(with: identifier) {
+                eTagHandler.validateFetchImage(
+                    with: url,
+                    cachedImage: cachedImage,
+                    cachedETag: cachedETag,
+                    completion: completion
+                )
+            } else {
+                downloadAndCacheImage(with: url, identifier: identifier, completion: completion)
             }
-               
+            
         case .forceDownload:
             downloadAndCacheImage(with: url, identifier: identifier, completion: completion)
         }
-        
-        
     }
     
-    private func validateETag(with url: URL, cachedETag: String, completion: @escaping (Bool) -> Void) {
-        
-    }
-    
-    private func downloadAndCacheImage(with url: URL, identifier: String, completion: @escaping (UIImage?) -> Void) {
-        //캐시 Miss -> 데이터 통신으로 이미지 로드 후 반환
+    private func downloadAndCacheImage(
+        with url: URL,
+        identifier: String,
+        completion: @escaping @Sendable (UIImage?) -> Void
+    ) {
         let task = session.dataTask(with: url) { [weak self] data, response, error in
             guard let data = data,
                   let image = UIImage(data: data),
                   error == nil else {
                 DispatchQueue.main.async {
-                    //TODO: Sendable?
                     completion(nil)
                 }
                 return
             }
             
-            //TODO: ETag 추출 및 저장
+            if let httpResponse = response as? HTTPURLResponse {
+                let newETag: String?
+                if #available(iOS 13.0, *) {
+                    newETag = httpResponse.value(forHTTPHeaderField: "ETag")
+                } else {
+                    newETag = (httpResponse.allHeaderFields["ETag"] as? String) ??
+                    (httpResponse.allHeaderFields["etag"] as? String)
+                }
+                if let newETag = newETag {
+                    let cacheable = CacheableImage(image: image, imageURL: url, identifier: identifier, eTag: newETag)
+                    self?.cacheManager.storeImage(with: cacheable)
+                } else {
+                    let cacheable = CacheableImage(image: image, imageURL: url, identifier: identifier)
+                    self?.cacheManager.storeImage(with: cacheable)
+                }
+            }
             
-            
-            //가져온 이미지를 캐시에 저장
             let cacheable = CacheableImage(image: image, imageURL: url)
             self?.cacheManager.storeImage(with: cacheable)
             
@@ -77,8 +100,8 @@ final class ImageDownloader: @unchecked Sendable {
                 completion(image)
             }
         }
-        
         task.resume()
     }
+    
 }
 

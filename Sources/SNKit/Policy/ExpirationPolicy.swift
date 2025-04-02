@@ -11,7 +11,7 @@ struct TimeConstants {
     static let secondsInOneDay = 86_400
 }
 
-//캐시 정책
+//캐시 만료 정책
 public struct ExpirationPolicy: Sendable {
     public enum Rule: Sendable {
         case never

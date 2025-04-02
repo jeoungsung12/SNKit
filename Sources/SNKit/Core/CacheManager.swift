@@ -6,24 +6,25 @@
 //
 
 import UIKit
-//TODO: 캐시 메인 로직(메모리/디스크/하이브리드 조율)
-//TODO: 캐시 정책은? 알고리즘? ETag? Memory? Disk? Prefetch? Realm? 동시성?
 
 struct CacheableImage: Cacheable {
     var image: UIImage?
     let imageURL: URL
     let identifier: String
+    let eTag: String?
     
-    public init(imageURL: URL, identifier: String? = nil) {
+    public init(imageURL: URL, identifier: String? = nil, eTag: String? = nil) {
         self.imageURL = imageURL
         self.identifier = identifier ?? imageURL.absoluteString
         self.image = nil
+        self.eTag = eTag
     }
     
-    public init(image: UIImage, imageURL: URL, identifier: String? = nil) {
+    public init(image: UIImage, imageURL: URL, identifier: String? = nil, eTag: String? = nil) {
         self.image = image
         self.imageURL = imageURL
         self.identifier = identifier ?? imageURL.absoluteString
+        self.eTag = eTag
     }
 }
 
@@ -90,9 +91,33 @@ public final class CacheManager: @unchecked Sendable {
     
     func clearCache() {
         //메모리, 디스크 모두 삭제
-        memoryCache.removeAll()
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.diskCache.removeAll()
+        hybridCache.removeAll()
+    }
+}
+
+//MARK: ETag
+extension CacheManager {
+    
+    func storeETag(_ eTag: String, with identifier: String) {
+        //기존 캐시에 이미지가 있는 경우에는 ETag만 업데이트
+        if let cachedImage = hybridCache.retrieve(with: identifier),
+           let url = URL(string: identifier){
+            let updateCacheable = CacheableImage(
+                image: cachedImage,
+                imageURL: url,
+                identifier: identifier,
+                eTag: eTag
+            )
+            hybridCache.store(updateCacheable)
         }
     }
+    
+    func retrieveETag(with identifier: String) -> String? {
+        //하이브리드 캐시 -> 메모리와 디스크 모두 검사해서 이미지를 가져옴
+        if let cacheable = hybridCache.retrieveCacheable(with: identifier) {
+            return cacheable.eTag
+        }
+        return nil
+    }
+    
 }

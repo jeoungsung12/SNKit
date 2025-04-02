@@ -44,6 +44,13 @@ final class HybridCache: @unchecked Sendable {
         return nil
     }
     
+    func retrieveCacheable(with identifier: String) -> Cacheable? {
+        if let image = retrieve(with: identifier) {
+            return CacheableImage(image: image, imageURL: URL(string: identifier)!, identifier: identifier)
+        }
+        return nil
+    }
+    
     func remove(with identifier: String) {
         memoryCache.remove(with: identifier)
         diskCache.remove(with: identifier)
