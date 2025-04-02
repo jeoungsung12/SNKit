@@ -8,7 +8,7 @@
 import UIKit
 
 // 이미지 처리 옵션
-public enum ImageProcessingOption {
+public enum ImageProcessingOption: Equatable {
     case resize(CGSize)
     case downsample(CGSize)
     case none

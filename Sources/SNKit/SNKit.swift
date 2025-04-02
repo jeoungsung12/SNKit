@@ -32,7 +32,15 @@ public final class SNKit {
             case .success(let image),
                     .cached(let image),
                     .validated(let image):
-                //TODO: processingOption none
+                if processingOption != .none {
+                    if let processedImage = self?.imageProcessor.process(image, with: processingOption) {
+                        completion(.success(processedImage))
+                    } else {
+                        completion(.success(image))
+                    }
+                } else {
+                    completion(.success(image))
+                }
             case .failure(let error):
                 completion(.failure(error))
             case .none:

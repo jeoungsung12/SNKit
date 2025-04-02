@@ -15,11 +15,22 @@ public extension UIImageView {
         processingOption: ImageProcessingOption = .none,
         completion: ((Result<UIImage,Error>) -> Void)? = nil
     ) {
-        //캐시에 이미지 존재 확인
         if let cacheImage = SNKit.shared.cachedImage(for: url),
            cacheOption == .cacheFirst {
-            //TODO: 이미지 프로세서 로직 구현
-            
+            if processingOption != .none {
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let imageProcessor = ImageProcessor()
+                    let processedImage = imageProcessor.process(cacheImage, with: processingOption) ?? cacheImage
+                    
+                    DispatchQueue.main.async {
+                        self.image = processedImage
+                        completion?(.success(processedImage))
+                    }
+                }
+            } else {
+                self.image = cacheImage
+                completion?(.success(cacheImage))
+            }
             return
         }
         
