@@ -18,7 +18,7 @@ SNKit은 iOS 앱을 위한 효율적인 이미지 캐싱 및 다운로드 라이
 
 ```swift
 dependencies: [
-    .package(url: "", from: "1.0.0")
+    .package(url: "https://github.com/jeoungsung12/SNKit.git", from: "1.0.0")
 ]
 ```
 
