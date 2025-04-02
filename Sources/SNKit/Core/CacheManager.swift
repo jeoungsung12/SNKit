@@ -27,7 +27,7 @@ struct CacheableImage: Cacheable {
     }
 }
 
-public final class CacheManager {
+public final class CacheManager: @unchecked Sendable {
     private let memoryCache: MemoryCache
     private let diskCache: DiskCache
     private let hybridCache: HybridCache

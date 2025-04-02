@@ -8,7 +8,7 @@
 import UIKit
 
 //TODO: 캐시 가능한 객체 프로토콜
-public protocol Cacheable {
+public protocol Cacheable: Sendable {
     var image: UIImage? { get set }
     var imageURL: URL { get }
     var identifier: String { get }

@@ -7,4 +7,7 @@
 
 import Foundation
 
-//TODO: ETag 로직 처리
+final class ETagHandler {
+    
+    
+}

@@ -7,7 +7,7 @@
 
 import UIKit
 
-final class HybridCache {
+final class HybridCache: @unchecked Sendable {
     private let memoryCache: MemoryCache
     private let diskCache: DiskCache
     
