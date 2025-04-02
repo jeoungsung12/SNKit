@@ -37,6 +37,14 @@ final class MemoryCache {
         return cache.object(forKey: identifier as NSString)
     }
     
+    func retrieveCacheable(with identifier: String) -> Cacheable? {
+        if let image = retrieve(with: identifier),
+           let url = URL(string: identifier) {
+            return CacheableImage(image: image, imageURL: url, identifier: identifier)
+        }
+        return nil
+    }
+    
     func remove(with identifier: String) {
         cache.removeObject(forKey: identifier as NSString)
     }

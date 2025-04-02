@@ -49,6 +49,14 @@ final class DiskCache {
         //이미지 로드
     }
     
+    func retrieveCacheable(with identifier: String) -> Cacheable? {
+        if let image = retrieve(with: identifier),
+           let url = URL(string: identifier) {
+            return CacheableImage(image: image, imageURL: url, identifier: identifier)
+        }
+        return nil
+    }
+    
     func remove(with identifier: String) {
         
     }

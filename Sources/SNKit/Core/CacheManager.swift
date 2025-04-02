@@ -7,25 +7,10 @@
 
 import UIKit
 
-struct CacheableImage: Cacheable {
-    var image: UIImage?
-    let imageURL: URL
-    let identifier: String
-    let eTag: String?
-    
-    public init(imageURL: URL, identifier: String? = nil, eTag: String? = nil) {
-        self.imageURL = imageURL
-        self.identifier = identifier ?? imageURL.absoluteString
-        self.image = nil
-        self.eTag = eTag
-    }
-    
-    public init(image: UIImage, imageURL: URL, identifier: String? = nil, eTag: String? = nil) {
-        self.image = image
-        self.imageURL = imageURL
-        self.identifier = identifier ?? imageURL.absoluteString
-        self.eTag = eTag
-    }
+public enum StorageOption {
+    case memory
+    case disk
+    case hybrid
 }
 
 public final class CacheManager: @unchecked Sendable {
@@ -46,78 +31,99 @@ public final class CacheManager: @unchecked Sendable {
         )
     }
     
-    func storeImage(with cachable: Cacheable) {
-        //TODO: 옵션에 따라 처리
-        memoryCache.store(cachable)
-        
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            //TODO: Sendable?
-            self?.diskCache.store(cachable)
+    func storeImage(with cachable: Cacheable, option: StorageOption = .hybrid) {
+        switch option {
+        case .memory:
+            memoryCache.store(cachable)
+        case .disk:
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                self?.diskCache.store(cachable)
+            }
+        case .hybrid:
+            hybridCache.store(cachable)
         }
-        
-        //하이브리드 캐시일때?
     }
     
-    func retrieveImage(with identifier: String) -> UIImage? {
-        //TODO: 옵션에 따라 처리
-        
-        //1. 메모리 캐시 Hit
-        if let image = memoryCache.retrieve(with: identifier) {
-            return image
+    func retrieveImage(with identifier: String, option: StorageOption = .hybrid) -> UIImage? {
+        switch option {
+        case .memory:
+            //1. 메모리 캐시 Hit
+            return memoryCache.retrieve(with: identifier)
+        case .disk:
+            //2. 디스크 캐시 Hit
+            return diskCache.retrieve(with: identifier)
+        case .hybrid:
+            //3. 하이브리드 캐시 Hit
+            return hybridCache.retrieve(with: identifier)
         }
-        
-        //2. 디스크 캐시 Hit
-        if let image = diskCache.retrieve(with: identifier) {
-            //메모리 캐시에도 저장해야하는가? or 바로 반환
-            return image
-        }
-        
-        //하이브리드일때!
-        
-        return nil
     }
     
-    func removeImage(with identifier: String) {
-        //1. 메모리 캐시 삭제
-        memoryCache.remove(with: identifier)
-        
-        //2. 디스크 캐시 삭제
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            self?.diskCache.remove(with: identifier)
+    func removeImage(with identifier: String, option: StorageOption = .hybrid) {
+        switch option {
+        case .memory:
+            //1. 메모리 캐시 삭제
+            memoryCache.remove(with: identifier)
+        case .disk:
+            //2. 디스크 캐시 삭제
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                self?.diskCache.remove(with: identifier)
+            }
+        case .hybrid:
+            hybridCache.remove(with: identifier)
         }
-        
-        //하이브리드일때
     }
     
-    func clearCache() {
-        //메모리, 디스크 모두 삭제
-        hybridCache.removeAll()
+    func clearCache(option: StorageOption = .hybrid) {
+        switch option {
+        case .memory:
+            memoryCache.removeAll()
+        case .disk:
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                self?.diskCache.removeAll()
+            }
+        case .hybrid:
+            hybridCache.removeAll()
+        }
     }
 }
 
 //MARK: ETag
 extension CacheManager {
     
-    func storeETag(_ eTag: String, with identifier: String) {
-        //기존 캐시에 이미지가 있는 경우에는 ETag만 업데이트
-        if let cachedImage = hybridCache.retrieve(with: identifier),
-           let url = URL(string: identifier){
-            let updateCacheable = CacheableImage(
-                image: cachedImage,
-                imageURL: url,
-                identifier: identifier,
-                eTag: eTag
-            )
-            hybridCache.store(updateCacheable)
+    func storeETag(_ eTag: String, with identifier: String, option: StorageOption = .hybrid) {
+        switch option {
+        case .memory:
+            if let cachedImage = memoryCache.retrieve(with: identifier),
+               let url = URL(string: identifier) {
+                let updated = CacheableImage(image: cachedImage, imageURL: url, identifier: identifier, eTag: eTag)
+                memoryCache.store(updated)
+            }
+        case .disk:
+            if let cachedImage = diskCache.retrieve(with: identifier),
+               let url = URL(string: identifier) {
+                let updated = CacheableImage(image: cachedImage, imageURL: url, identifier: identifier, eTag: eTag)
+                DispatchQueue.global(qos: .utility).async { [weak self] in
+                    self?.diskCache.store(updated)
+                }
+            }
+        case .hybrid:
+            if let cachedImage = hybridCache.retrieve(with: identifier),
+               let url = URL(string: identifier) {
+                let updated = CacheableImage(image: cachedImage, imageURL: url, identifier: identifier, eTag: eTag)
+                hybridCache.store(updated)
+            }
         }
     }
     
-    func retrieveETag(with identifier: String) -> String? {
-        //하이브리드 캐시 -> 메모리와 디스크 모두 검사해서 이미지를 가져옴
-        if let cacheable = hybridCache.retrieveCacheable(with: identifier) {
-            return cacheable.eTag
+    func retrieveETag(with identifier: String, option: StorageOption = .hybrid) -> String? {
+        switch option {
+        case .memory:
+            return memoryCache.retrieveCacheable(with: identifier)?.eTag
+        case .disk:
+            return diskCache.retrieveCacheable(with: identifier)?.eTag
+        case .hybrid:
+            return hybridCache.retrieveCacheable(with: identifier)?.eTag
         }
-        return nil
     }
     
 }

@@ -25,6 +25,7 @@ final class ImageDownloader: @unchecked Sendable {
         self.session = session
         self.cacheManager = cacheManager
         self.eTagHandler = ETagHandler(session: session, cacheManager: cacheManager)
+        
     }
     
     func downloadImage(

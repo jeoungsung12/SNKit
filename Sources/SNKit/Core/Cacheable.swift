@@ -15,3 +15,23 @@ public protocol Cacheable: Sendable {
     var eTag: String? { get }
 }
 
+struct CacheableImage: Cacheable {
+    var image: UIImage?
+    let imageURL: URL
+    let identifier: String
+    let eTag: String?
+    
+    public init(imageURL: URL, identifier: String? = nil, eTag: String? = nil) {
+        self.imageURL = imageURL
+        self.identifier = identifier ?? imageURL.absoluteString
+        self.image = nil
+        self.eTag = eTag
+    }
+    
+    public init(image: UIImage, imageURL: URL, identifier: String? = nil, eTag: String? = nil) {
+        self.image = image
+        self.imageURL = imageURL
+        self.identifier = identifier ?? imageURL.absoluteString
+        self.eTag = eTag
+    }
+}
