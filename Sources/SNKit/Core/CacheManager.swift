@@ -23,7 +23,7 @@ public final class CacheManager: @unchecked Sendable {
         self.diskCache = DiskCache(
             directory: configuration.cacheDirectory,
             capacity: configuration.diskCacheCapacity,
-            expirationInterval: configuration.expirationInterval
+            expirationPolicy: configuration.expirationPolicy
         )
         self.hybridCache = HybridCache(
             memoryCache: self.memoryCache,

@@ -13,17 +13,17 @@ final class DiskCache {
     private let cacheDirectory: URL
     private let lock = NSLock()
     private let capacity: Int
-    private let expirationInterval: TimeInterval
+    private let expirationPolicy: ExpirationPolicy
     
     init(
         directory: URL?,
         capacity: Int,
-        expirationInterval: TimeInterval
+        expirationPolicy: ExpirationPolicy
     ) {
         let cacheDirectory = directory ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
         self.cacheDirectory = cacheDirectory
         self.capacity = capacity
-        self.expirationInterval = expirationInterval
+        self.expirationPolicy = expirationPolicy
         
         //디렉토리가 없을 경우 생성
         createDirectoryIfNeed()
@@ -54,8 +54,8 @@ final class DiskCache {
             //이미지 데이터를 저장
             try data.write(to: fileURL)
             
-            //TODO: 알고리즘 정책에 맞게 파일의 용량을 넘으면 삭제!
-            
+            //용량 체크 넘으면 -> 삭제
+            removeFilesIfNeeded()
         } catch {
             print("디스크 캐시 저장 실패")
         }
@@ -80,14 +80,14 @@ final class DiskCache {
             let creationDate = Date(timeIntervalSince1970: createdAt)
             let currentDate = Date()
             
-            if currentDate.timeIntervalSince(creationDate) > expirationInterval {
+            if expirationPolicy.isExpired(createdAt: creationDate, currentDate: currentDate) {
                 try? fileManager.removeItem(at: fileURL)
                 try? fileManager.removeItem(at: metadataURL)
                 return nil
             }
             
             //TODO: 접근시간 업데이트 (알고리즘 LRU)
-            removeFilesIfNeeded()
+            updateAccessTime(for: metadataURL, info: info)
         }
         
         do {
@@ -96,6 +96,18 @@ final class DiskCache {
         } catch {
             print("디스크 이미지 로딩 실패!")
             return nil
+        }
+    }
+    
+    private func updateAccessTime(for metadataURL: URL, info: [String: Any]) {
+        var updatedInfo = info
+        updatedInfo["lastAccessedAt"] = Date().timeIntervalSince1970
+        
+        do {
+            let metadataData = try JSONSerialization.data(withJSONObject: updatedInfo, options: [])
+            try metadataData.write(to: metadataURL)
+        } catch {
+            print("메타데이터 업데이트 실패")
         }
     }
     
@@ -167,14 +179,33 @@ extension DiskCache {
         var fileAttributes: [[String:Any]] = []
         
         for fileURL in files {
+            
+            if fileURL.pathExtension == "metadata" {
+                continue
+            }
+            
             if let attributes = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
                let fileSize = attributes.fileSize,
                let modificationDate = attributes.contentModificationDate {
                 totalSize += fileSize
+                
+                let metadataURL = fileURL.appendingPathExtension("metadata")
+                var lastAccessTime: Date = Date.distantPast
+                
+                if let metadata = try? Data(contentsOf: metadataURL),
+                   let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any] {
+                    if let accessTime = info["lastAccessedAt"] as? TimeInterval {
+                        lastAccessTime = Date(timeIntervalSince1970: accessTime)
+                    } else if let createdTime = info["createdAt"] as? TimeInterval {
+                        lastAccessTime = Date(timeIntervalSince1970: createdTime)
+                    }
+                }
+                
                 fileAttributes.append([
                     "url": fileURL,
                     "size": fileSize,
-                    "date": modificationDate
+                    "accessDate": lastAccessTime,
+                    "metadataURL": metadataURL
                 ])
             }
         }
@@ -191,9 +222,11 @@ extension DiskCache {
                     break
                 }
                 
-                if let fileURL = file["url"] as? URL {
+                if let fileURL = file["url"] as? URL,
+                   let metadataURL = file["metadataURL"] as? URL {
                     do {
                         try fileManager.removeItem(at: fileURL)
+                        try fileManager.removeItem(at: metadataURL)
                         currentSize -= (file["size"] as? Int) ?? 0
                     } catch {
                         print("캐시 파일 삭제 에러")
