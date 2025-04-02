@@ -12,17 +12,19 @@ public struct Configuration {
     public let diskCacheCapacity: Int
     public let expirationPolicy: ExpirationPolicy
     public let cacheDirectory: URL?
+    public let defaultStorageOption: StorageOption
     
     public init(
         memoryCacheCapacity: Int = 50_000_000,
         diskCacheCapacity: Int = 100_000_000,
-        // 기본값 7일 만료
         expirationPolicy: ExpirationPolicy = ExpirationPolicy(rule: .days(7)),
-        cacheDirectory: URL? = nil
+        cacheDirectory: URL? = nil,
+        defaultStorageOption: StorageOption = .hybrid
     ) {
         self.memoryCacheCapacity = memoryCacheCapacity
         self.diskCacheCapacity = diskCacheCapacity
         self.expirationPolicy = expirationPolicy
         self.cacheDirectory = cacheDirectory
+        self.defaultStorageOption = defaultStorageOption
     }
 }

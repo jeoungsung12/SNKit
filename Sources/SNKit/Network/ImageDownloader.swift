@@ -44,6 +44,7 @@ final class ImageDownloader: @unchecked Sendable {
     
     func downloadImage(
         with url: URL,
+        storageOption: StorageOption = .hybrid,
         option: CacheOption = .cacheFirst ,
         completion: @escaping @Sendable (DownloadResult?) -> Void
     ) {
@@ -59,7 +60,7 @@ final class ImageDownloader: @unchecked Sendable {
                 }
                 return
             }
-            downloadAndCacheImage(with: url, identifier: identifier, completion: completion)
+            downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
             
         case .eTagValidation:
             //TODO: Etag 검증, 캐시 Hit -> Etag 확인, 없으면 그냥 다운
@@ -72,11 +73,11 @@ final class ImageDownloader: @unchecked Sendable {
                     completion: completion
                 )
             } else {
-                downloadAndCacheImage(with: url, identifier: identifier, completion: completion)
+                downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
             }
             
         case .forceDownload:
-            downloadAndCacheImage(with: url, identifier: identifier, completion: completion)
+            downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
         }
     }
     
@@ -118,6 +119,7 @@ extension ImageDownloader {
     private func downloadAndCacheImage(
         with url: URL,
         identifier: String,
+        storageOption: StorageOption = .hybrid,
         completion: @escaping @Sendable (DownloadResult) -> Void
     ) {
         dispatchQueue.async { [weak self] in
@@ -175,7 +177,7 @@ extension ImageDownloader {
                     eTag: eTag
                 )
                 
-                self?.cacheManager.storeImage(with: cacheable)
+                self?.cacheManager.storeImage(with: cacheable, option: storageOption)
                 
                 DispatchQueue.main.async {
                     completion(.success(image))

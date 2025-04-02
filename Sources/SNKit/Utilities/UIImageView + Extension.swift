@@ -12,9 +12,12 @@ public extension UIImageView {
     func snSetImage(
         with url: URL,
         cacheOption: CacheOption = .cacheFirst,
+        storageOption: StorageOption? = nil,
         processingOption: ImageProcessingOption = .none,
         completion: ((Result<UIImage,Error>) -> Void)? = nil
     ) {
+        let storageOpt = storageOption ?? SNKit.shared.defaultStorageOption
+        
         if let cacheImage = SNKit.shared.cachedImage(for: url),
            cacheOption == .cacheFirst {
             if processingOption != .none {
@@ -37,6 +40,7 @@ public extension UIImageView {
         SNKit.shared.loadImage(
             from: url,
             cacheOption: cacheOption,
+            storageOption: storageOption,
             processingOption: processingOption
         ) { [weak self] result in
             switch result {

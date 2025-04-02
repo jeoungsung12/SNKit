@@ -8,12 +8,14 @@ public final class SNKit {
     private let imageProcessor: ImageProcessor
     private let session: URLSession
     private let downloader: ImageDownloader
+    let defaultStorageOption: StorageOption
     
     public static let shared = SNKit()
     
     public init(configuration: Configuration = Configuration()) {
         self.cacheManager = CacheManager(configuration: configuration)
         self.imageProcessor = ImageProcessor()
+        self.defaultStorageOption = configuration.defaultStorageOption
         
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -24,10 +26,26 @@ public final class SNKit {
     public func loadImage(
         from url: URL,
         cacheOption: CacheOption = .cacheFirst,
+        storageOption: StorageOption? = nil,
         processingOption: ImageProcessingOption = .none,
         completion: @escaping (Result<UIImage,Error>) -> Void
     ) {
-        downloader.downloadImage(with: url, option: cacheOption) { [weak self] result in
+        let storageOpt = storageOption ?? defaultStorageOption
+        
+        if cacheOption == .cacheFirst, let cachedImage = cacheManager.retrieveImage(with: url.absoluteString, option: storageOpt) {
+            if processingOption != .none {
+                if let processedImage = self.imageProcessor.process(cachedImage, with: processingOption) {
+                    completion(.success(processedImage))
+                } else {
+                    completion(.success(cachedImage))
+                }
+            } else {
+                completion(.success(cachedImage))
+            }
+            return
+        }
+        
+        downloader.downloadImage(with: url, storageOption: storageOpt, option: cacheOption) { [weak self] result in
             switch result {
             case .success(let image),
                     .cached(let image),
