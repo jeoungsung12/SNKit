@@ -20,46 +20,47 @@ final class HybridCache: @unchecked Sendable {
         self.diskCache = diskCache
     }
     
-    private var identifier: String = ""
-    
     func store(_ cacheable: Cacheable) {
-        //메모리 캐시 저장
         memoryCache.store(cacheable)
-        //디스크 캐시 저장
         dispatchQueue.async { [weak self] in
             self?.diskCache.store(cacheable)
         }
     }
     
     func retrieve(with identifier: String) -> UIImage? {
-        //메모리 Hit 확인
         if let image = memoryCache.retrieve(with: identifier) {
             return image
         }
-        //디스크 Hit 확인
-        if let image = diskCache.retrieve(with: identifier) {
-            if let url = URL(string: identifier) {
-                let cacheable = CacheableImage(image: image, imageURL: url, identifier: identifier)
-                memoryCache.store(cacheable)
-            }
-            return image
-        }
         
-        return nil
+        return dispatchQueue.sync {
+            if let image = diskCache.retrieve(with: identifier) {
+                if let url = URL(string: identifier) {
+                    let cacheable = CacheableImage(image: image, imageURL: url, identifier: identifier)
+                    DispatchQueue.main.async {
+                        self.memoryCache.store(cacheable)
+                    }
+                }
+                return image
+            }
+            
+            return nil
+        }
     }
     
     func retrieveCacheable(with identifier: String) -> Cacheable? {
-        //메모리 -> 디스크 다 돌고 없으면 nil 반환 순서
         if let cacheable = memoryCache.retrieveCacheable(with: identifier) {
             return cacheable
         }
         
-        if let cacheable = diskCache.retrieveCacheable(with: identifier) {
-            memoryCache.store(cacheable)
-            return cacheable
+        return dispatchQueue.sync {
+            if let cacheable = diskCache.retrieveCacheable(with: identifier) {
+                DispatchQueue.main.async {
+                    self.memoryCache.store(cacheable)
+                }
+                return cacheable
+            }
+            return nil
         }
-        
-        return nil
     }
     
     func remove(with identifier: String) {

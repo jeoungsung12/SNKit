@@ -7,16 +7,29 @@
 
 import UIKit
 
-//NSCache 스레드 세이프. read-only 작업만 할 시에는 -> NSLock이 필요한가?(etc. Actor)
-//저장이나 삭제할 시에는? NSLock이 필요한가?
+final class CacheItem: NSObject {
+    let image: UIImage
+    let identifier: String
+    let eTag: String?
+    let createdAt: Date
+    var lastAccessedAt: Date
+    
+    init(image: UIImage, identifier: String, eTag: String? = nil, createdAt: Date = Date()) {
+        self.image = image
+        self.identifier = identifier
+        self.eTag = eTag
+        self.createdAt = createdAt
+        self.lastAccessedAt = Date()
+        super.init()
+    }
+}
+
 final class MemoryCache {
-    private let cache = NSCache<NSString, UIImage>()
+    private let cache = NSCache<NSString, CacheItem>()
     
     init(capacity: Int) {
-        //메모리 최대 용량 설정
         cache.totalCostLimit = capacity
         
-        //TODO: 메모리 최대 용량을 넘어설때 알림
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(didReceiveMemoryWarning),
@@ -34,27 +47,32 @@ final class MemoryCache {
         guard let image = cacheable.image else { return }
         let key = cacheable.identifier as NSString
         
-        
-        
+        let cacheItem = CacheItem(
+            image: image,
+            identifier: cacheable.identifier,
+            eTag: cacheable.eTag,
+            createdAt: Date()
+        )
         
         let cost = Int(image.size.width * image.size.height * 4)
-        cache.setObject(image, forKey: key, cost: cost)
+        cache.setObject(cacheItem, forKey: key, cost: cost)
     }
     
     func retrieve(with identifier: String) -> UIImage? {
-        return cache.object(forKey: identifier as NSString)
+        return cache.object(forKey: identifier as NSString)?.image
     }
     
     func retrieveCacheable(with identifier: String) -> Cacheable? {
-        guard let cachedObject = cache.object(forKey: identifier as NSString),
+        guard let cacheItem = cache.object(forKey: identifier as NSString),
               let url = URL(string: identifier) else {
             return nil
         }
         
         return CacheableImage(
-            image: cachedObject,
+            image: cacheItem.image,
             imageURL: url,
-            identifier: identifier
+            identifier: identifier,
+            eTag: cacheItem.eTag
         )
     }
     
