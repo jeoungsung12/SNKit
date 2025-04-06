@@ -87,30 +87,7 @@ final class MemoryCache {
     @objc
     private func didReceiveMemoryWarning() {
         print(#function, self)
-        let currentItems = getAllCachedItems()
         removeAll()
-        
-        let itemsToKeep = Int(Double(currentItems.count) * 0.25)
-        let sortedItems = currentItems.sorted { $0.lastAccessedAt > $1.lastAccessedAt }
-        
-        for i in 0..<min(itemsToKeep, sortedItems.count) {
-            let item = sortedItems[i]
-            if let url = URL(string: item.identifier) {
-                let cacheable = CacheableImage(
-                    image: item.image,
-                    imageURL: url,
-                    identifier: item.identifier,
-                    eTag: item.eTag
-                )
-                store(cacheable)
-            }
-        }
-    }
-    
-    private func getAllCachedItems() -> [CacheItem] {
-        var items = [CacheItem]()
-        
-        return items
     }
 }
 
