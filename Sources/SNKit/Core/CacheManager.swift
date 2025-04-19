@@ -37,7 +37,7 @@ public final class CacheManager: @unchecked Sendable {
             memoryCache.store(cachable)
         case .disk:
             DispatchQueue.global(qos: .utility).async { [weak self] in
-                self?.diskCache.store(cachable)
+                try? self?.diskCache.store(cachable)
             }
         case .hybrid:
             hybridCache.store(cachable)
@@ -103,7 +103,7 @@ extension CacheManager {
                let url = URL(string: identifier) {
                 let updated = CacheableImage(image: cachedImage, imageURL: url, identifier: identifier, eTag: eTag)
                 DispatchQueue.global(qos: .utility).async { [weak self] in
-                    self?.diskCache.store(updated)
+                    try? self?.diskCache.store(updated)
                 }
             }
         case .hybrid:

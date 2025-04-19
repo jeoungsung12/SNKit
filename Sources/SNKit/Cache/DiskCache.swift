@@ -77,7 +77,7 @@ final class DiskCache {
             
             logger.debug("디스크 캐시에 저장 성공: \(key)")
             
-            try removeFilesIfNeeded()
+            removeFilesIfNeeded()
         } catch {
             logger.error("디스크 캐시 저장 실패: \(error.localizedDescription)")
             throw DiskCacheError.saveImageFailed
@@ -187,7 +187,7 @@ final class DiskCache {
         defer { lock.unlock() }
         
         try? fileManager.removeItem(at: cacheDirectory)
-        createDirectoryIfNeed()
+        try? createDirectoryIfNeed()
     }
     
 }

@@ -18,7 +18,11 @@ let package = Package(
         .target(
             name: "SNKit",
             dependencies: [],
-            path: "Sources")
+            path: "Sources"),
+        .testTarget(
+            name: "SNKitTests",
+            dependencies: ["SNKit"],
+            path: "Tests/SNKitTests")
     ],
     swiftLanguageModes: [.v5]
 )

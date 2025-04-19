@@ -13,20 +13,28 @@ public final class SNKit {
     private let logger = Logger(subsystem: "com.snkit", category: "SNKit")
     public static let shared = SNKit()
     
-    public init(
+    init(
         configuration: Configuration = Configuration(),
         session: URLSession? = nil,
         cacheManager: CacheManager? = nil,
         imageProcessor: ImageProcessor? = nil
     ) {
-        self.cacheManager = cacheManager ?? CacheManager(configuration: configuration)
-        self.imageProcessor = imageProcessor ?? ImageProcessor()
-        self.defaultStorageOption = configuration.defaultStorageOption
-        
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
-        self.session = session ?? URLSession(configuration: sessionConfig)
-        self.downloader = ImageDownloader(session: session, cacheManager: cacheManager)
+        let finalSession = session ?? URLSession(configuration: sessionConfig)
+        
+        let finalCacheManager = cacheManager ?? CacheManager(configuration: configuration)
+        let finalImageProcessor = imageProcessor ?? ImageProcessor()
+        
+        self.cacheManager = finalCacheManager
+        self.imageProcessor = finalImageProcessor
+        self.defaultStorageOption = configuration.defaultStorageOption
+        self.session = finalSession
+        
+        self.downloader = ImageDownloader(
+            session: finalSession,
+            cacheManager: finalCacheManager
+        )
         
         logger.info("SNKit 초기화 - 속성: \(configuration)")
     }
