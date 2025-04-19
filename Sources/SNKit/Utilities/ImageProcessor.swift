@@ -7,7 +7,6 @@
 
 import UIKit
 
-// 이미지 처리 옵션
 public enum ImageProcessingOption: Equatable {
     case resize(CGSize)
     case downsample(CGSize)
@@ -15,7 +14,6 @@ public enum ImageProcessingOption: Equatable {
 }
 
 final class ImageProcessor {
-    
     func process(_ image: UIImage, with option: ImageProcessingOption) -> UIImage? {
         switch option {
         case .resize(let size):

@@ -7,31 +7,48 @@
 
 import UIKit
 
-//파일매니저에서의 작업은 스레드 세이프 하지 않다. -> Lock 필요?
 final class DiskCache {
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
     private let lock = NSLock()
     private let capacity: Int
     private let expirationPolicy: ExpirationPolicy
+    private let logger = Logger(subsystem: "com.snkit", category: "DiskCache")
+    
+    enum DiskCacheError: Error {
+        case createDirectoryFailed
+        case saveImageFailed
+        case saveMetadataFailed
+        case loadImageFailed
+        case updateMetadataFailed
+        case removeFileFailed
+    }
     
     init(
         directory: URL?,
         capacity: Int,
         expirationPolicy: ExpirationPolicy
     ) {
-        let cacheDirectory = directory ?? fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let cacheDirectory = directory ?? fileManager.urls(
+            for: .cachesDirectory,
+            in: .userDomainMask
+        ).first!.appendingPathComponent("SNKitCache", isDirectory: true)
         self.cacheDirectory = cacheDirectory
         self.capacity = capacity
         self.expirationPolicy = expirationPolicy
         
-        //디렉토리가 없을 경우 생성
-        createDirectoryIfNeed()
+        do {
+            try createDirectoryIfNeed()
+            logger.info("디스크 캐시 초기화: \(cacheDirectory.path)")
+        } catch {
+            logger.error("디스크 캐시 생성 실패: \(error.localizedDescription)")
+        }
     }
     
-    func store(_ cacheable: Cacheable) {
-        //png 데이터로? jpeg 데이터로?
-        guard let image = cacheable.image, let data = image.jpegData(compressionQuality: 0.8) else { return }
+    func store(_ cacheable: Cacheable) throws {
+        guard let image = cacheable.image, let data = image.jpegData(compressionQuality: 0.8) else {
+            throw DiskCacheError.saveImageFailed
+        }
         let key = cacheable.identifier
         let fileURL = cacheURL(for: key)
         
@@ -39,9 +56,9 @@ final class DiskCache {
         defer { lock.unlock() }
         
         do {
-            //생성시간, 이테그
             var metaData: [String:Any] = [
-                "createdAt": Date().timeIntervalSince1970
+                "createdAt": Date().timeIntervalSince1970,
+                "lastAccessedAt": Date().timeIntervalSince1970
             ]
             if let eTag = cacheable.eTag {
                 metaData["eTag"] = eTag
@@ -49,15 +66,21 @@ final class DiskCache {
             
             let metadataURL = fileURL.appendingPathExtension("metadata")
             let metadataData = try JSONSerialization.data(withJSONObject: metaData, options: [])
-            try metadataData.write(to: metadataURL)
             
-            //이미지 데이터를 저장
+            let directory = fileURL.deletingLastPathComponent()
+            if !fileManager.fileExists(atPath: directory.path) {
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+            
+            try metadataData.write(to: metadataURL)
             try data.write(to: fileURL)
             
-            //용량 체크 넘으면 -> 삭제
+            logger.debug("디스크 캐시에 저장 성공: \(key)")
+            
             removeFilesIfNeeded()
         } catch {
-            print("디스크 캐시 저장 실패")
+            logger.error("디스크 캐시 저장 실패: \(error.localizedDescription)")
+            throw DiskCacheError.saveImageFailed
         }
     }
     
@@ -68,38 +91,54 @@ final class DiskCache {
         lock.lock()
         defer { lock.unlock() }
         
-        //파일이 디스크에 존재하는지?
         guard fileManager.fileExists(atPath: fileURL.path) else {
+            logger.debug("디스크 캐시에서 파일을 찾을 수 없음: \(identifier)")
             return nil
         }
         
-        if let metadata = try? Data(contentsOf: metadataURL),
-           let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any],
-           let createdAt = info["createdAt"] as? TimeInterval {
-            
-            let creationDate = Date(timeIntervalSince1970: createdAt)
-            let currentDate = Date()
-            
-            if expirationPolicy.isExpired(createdAt: creationDate, currentDate: currentDate) {
-                try? fileManager.removeItem(at: fileURL)
-                try? fileManager.removeItem(at: metadataURL)
-                return nil
-            }
-            
-            //TODO: 접근시간 업데이트 (알고리즘 LRU)
-            updateAccessTime(for: metadataURL, info: info)
+        guard fileManager.fileExists(atPath: metadataURL.path) else {
+            logger.debug("메타데이터를 찾을 수 없음: \(identifier)")
+            try? fileManager.removeItem(at: fileURL)
+            return nil
         }
         
         do {
+            if let metadata = try? Data(contentsOf: metadataURL),
+               let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any],
+               let createdAt = info["createdAt"] as? TimeInterval {
+                
+                let creationDate = Date(timeIntervalSince1970: createdAt)
+                let currentDate = Date()
+                
+                if expirationPolicy.isExpired(createdAt: creationDate, currentDate: currentDate) {
+                    logger.debug("캐시에서 만료됨: \(identifier)")
+                    try? fileManager.removeItem(at: fileURL)
+                    try? fileManager.removeItem(at: metadataURL)
+                    return nil
+                }
+                
+                try updateAccessTime(for: metadataURL, info: info)
+            }
+            
             let data = try Data(contentsOf: fileURL)
-            return UIImage(data: data)
+            guard let image = UIImage(data: data) else {
+                logger.error("유효하지 않은 데이터: \(identifier)")
+                try fileManager.removeItem(at: fileURL)
+                try fileManager.removeItem(at: metadataURL)
+                return nil
+            }
+            
+            logger.debug("디스크 캐시 - 이미지 조회 성공: \(identifier)")
+            return image
         } catch {
-            print("디스크 이미지 로딩 실패!")
+            logger.error("디스크 캐시 - 이미지 조회 실패: \(error.localizedDescription)")
+            try? fileManager.removeItem(at: fileURL)
+            try? fileManager.removeItem(at: metadataURL)
             return nil
         }
     }
     
-    private func updateAccessTime(for metadataURL: URL, info: [String: Any]) {
+    private func updateAccessTime(for metadataURL: URL, info: [String: Any]) throws {
         var updatedInfo = info
         updatedInfo["lastAccessedAt"] = Date().timeIntervalSince1970
         
@@ -107,13 +146,15 @@ final class DiskCache {
             let metadataData = try JSONSerialization.data(withJSONObject: updatedInfo, options: [])
             try metadataData.write(to: metadataURL)
         } catch {
-            print("메타데이터 업데이트 실패")
+            logger.error("메타데이터 업데이트 실패: \(error.localizedDescription)")
+            throw DiskCacheError.updateMetadataFailed
         }
     }
     
     func retrieveCacheable(with identifier: String) -> Cacheable? {
         guard let image = retrieve(with: identifier),
-           let url = URL(string: identifier) else {
+              let url = URL(string: identifier) else {
+            logger.error("이미지 조회 실패")
             return nil
         }
         
@@ -123,6 +164,8 @@ final class DiskCache {
         if let metadata = try? Data(contentsOf: metadataURL),
            let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any] {
             eTag = info["eTag"] as? String
+        } else {
+            logger.error("메타데이터 조회 실패")
         }
         
         return CacheableImage(image: image, imageURL: url, identifier: identifier, eTag: eTag)
@@ -144,7 +187,7 @@ final class DiskCache {
         defer { lock.unlock() }
         
         try? fileManager.removeItem(at: cacheDirectory)
-        createDirectoryIfNeed()
+        try? createDirectoryIfNeed()
     }
     
 }
@@ -152,12 +195,11 @@ final class DiskCache {
 extension DiskCache {
     
     private func cacheURL(for key: String) -> URL {
-        // 파일 이름 충돌을 방지하기 위해 해시 값 사용 -> 이게 sha256같은건가?
-        let hashedKey = key.hashValue
-        return cacheDirectory.appendingPathComponent("\(hashedKey)", isDirectory: false)
+        let hashedKey = "\(key.hashValue)"
+        return cacheDirectory.appendingPathComponent(hashedKey, isDirectory: false)
     }
     
-    private func createDirectoryIfNeed() {
+    private func createDirectoryIfNeed() throws {
         lock.lock()
         defer { lock.unlock() }
         
@@ -165,28 +207,30 @@ extension DiskCache {
             do {
                 try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true, attributes: nil)
             } catch {
-                print("캐시 디렉토리 생성 에러")
+                logger.error("캐시 디렉토리 생성 에러: \(error.localizedDescription)")
+                throw DiskCacheError.createDirectoryFailed
             }
         }
     }
     
     private func removeFilesIfNeeded() {
-        //현재 캐시의 크기가 용량을 초과한다면? 가장 오래된 것부터 삭제할것
-        let fileURLs = try? fileManager.contentsOfDirectory(at: cacheDirectory, includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey], options: [])
+        let fileURLs = try? fileManager.contentsOfDirectory(
+            at: cacheDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+            options: []
+        )
         guard let files = fileURLs else { return }
         
         var totalSize: Int = 0
         var fileAttributes: [[String:Any]] = []
         
         for fileURL in files {
-            
             if fileURL.pathExtension == "metadata" {
                 continue
             }
             
-            if let attributes = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]),
-               let fileSize = attributes.fileSize,
-               let modificationDate = attributes.contentModificationDate {
+            if let attributes = try? fileURL.resourceValues(forKeys: [.fileSizeKey]),
+               let fileSize = attributes.fileSize {
                 totalSize += fileSize
                 
                 let metadataURL = fileURL.appendingPathExtension("metadata")
@@ -210,15 +254,14 @@ extension DiskCache {
             }
         }
         
-        //TODO: LRU
         if totalSize > capacity {
             let sortedFiles = fileAttributes.sorted { (file1, file2) -> Bool in
-                return (file1["date"] as! Date) < (file2["date"] as! Date)
+                return (file1["accessDate"] as! Date) < (file2["accessDate"] as! Date)
             }
             
             var currentSize = totalSize
             for file in sortedFiles {
-                if currentSize <= capacity * 8 / 10 { // -> 80프로 줄이기?
+                if currentSize <= capacity * 8 / 10 {
                     break
                 }
                 

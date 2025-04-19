@@ -4,23 +4,39 @@
 import UIKit
 
 public final class SNKit {
-    private let cacheManager: CacheManager
-    private let imageProcessor: ImageProcessor
-    private let session: URLSession
-    private let downloader: ImageDownloader
-    let defaultStorageOption: StorageOption
+    let cacheManager: CacheManager
+    let imageProcessor: ImageProcessor
+    let session: URLSession
+    let downloader: ImageDownloader
+    public let defaultStorageOption: StorageOption
     
+    private let logger = Logger(subsystem: "com.snkit", category: "SNKit")
     public static let shared = SNKit()
     
-    public init(configuration: Configuration = Configuration()) {
-        self.cacheManager = CacheManager(configuration: configuration)
-        self.imageProcessor = ImageProcessor()
-        self.defaultStorageOption = configuration.defaultStorageOption
-        
+    init(
+        configuration: Configuration = Configuration(),
+        session: URLSession? = nil,
+        cacheManager: CacheManager? = nil,
+        imageProcessor: ImageProcessor? = nil
+    ) {
         let sessionConfig = URLSessionConfiguration.default
         sessionConfig.requestCachePolicy = .reloadIgnoringLocalCacheData
-        self.session = URLSession(configuration: sessionConfig)
-        self.downloader = ImageDownloader(session: session, cacheManager: cacheManager)
+        let finalSession = session ?? URLSession(configuration: sessionConfig)
+        
+        let finalCacheManager = cacheManager ?? CacheManager(configuration: configuration)
+        let finalImageProcessor = imageProcessor ?? ImageProcessor()
+        
+        self.cacheManager = finalCacheManager
+        self.imageProcessor = finalImageProcessor
+        self.defaultStorageOption = configuration.defaultStorageOption
+        self.session = finalSession
+        
+        self.downloader = ImageDownloader(
+            session: finalSession,
+            cacheManager: finalCacheManager
+        )
+        
+        logger.info("SNKit 초기화 - 속성: \(configuration)")
     }
     
     public func loadImage(
@@ -33,37 +49,48 @@ public final class SNKit {
         let storageOpt = storageOption ?? defaultStorageOption
         
         if cacheOption == .cacheFirst, let cachedImage = cacheManager.retrieveImage(with: url.absoluteString, option: storageOpt) {
-            if processingOption != .none {
-                if let processedImage = self.imageProcessor.process(cachedImage, with: processingOption) {
-                    completion(.success(processedImage))
-                } else {
-                    completion(.success(cachedImage))
-                }
-            } else {
-                completion(.success(cachedImage))
-            }
+            logger.debug("캐시 히트 - URL: \(url.absoluteString)")
+            processAndDeliver(image: cachedImage, with: processingOption, completion: completion)
             return
         }
         
+        logger.debug("캐시 미스/캐시옵션 지정 X - URL: \(url.absoluteString)")
         downloader.downloadImage(with: url, storageOption: storageOpt, option: cacheOption) { [weak self] result in
+            guard let self = self else { return }
+            
             switch result {
-            case .success(let image),
-                    .cached(let image),
-                    .validated(let image):
-                if processingOption != .none {
-                    if let processedImage = self?.imageProcessor.process(image, with: processingOption) {
-                        completion(.success(processedImage))
-                    } else {
-                        completion(.success(image))
-                    }
-                } else {
-                    completion(.success(image))
-                }
+            case .success(let image), .cached(let image), .validated(let image):
+                self.logger.info("이미지 로드 성공: \(url.absoluteString)")
+                self.processAndDeliver(image: image, with: processingOption, completion: completion)
             case .failure(let error):
+                self.logger.error("이미지 로드 실패: \(error.localizedDescription)")
                 completion(.failure(error))
             case .none:
-                completion(.failure(DownloadError.invalidData))
+                let error = DownloadError.invalidData
+                self.logger.error("유효하지 않은 이미지: \(error.localizedDescription)")
+                completion(.failure(error))
             }
+        }
+    }
+    
+    private func processAndDeliver(image: UIImage, with option: ImageProcessingOption, completion: @escaping (Result<UIImage,Error>) -> Void) {
+        if option != .none {
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                guard let self = self else { return }
+                
+                if let processedImage = self.imageProcessor.process(image, with: option) {
+                    DispatchQueue.main.async {
+                        completion(.success(processedImage))
+                    }
+                } else {
+                    self.logger.warning("이미지 Processor 작업 실패, 원본 이미지 반환")
+                    DispatchQueue.main.async {
+                        completion(.success(image))
+                    }
+                }
+            }
+        } else {
+            completion(.success(image))
         }
     }
     
@@ -72,10 +99,12 @@ public final class SNKit {
     }
     
     public func clearCache(option: StorageOption = .hybrid) {
+        logger.info("캐시 모두 지우기: \(option)")
         cacheManager.clearCache(option: option)
     }
     
     public func removeCache(for url: URL, option: StorageOption = .hybrid) {
+        logger.debug("캐시에서 이미지 지우기: \(url.absoluteString)")
         cacheManager.removeImage(with: url.absoluteString, option: option)
     }
 }
