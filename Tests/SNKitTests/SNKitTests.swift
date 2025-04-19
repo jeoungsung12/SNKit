@@ -13,7 +13,7 @@ final class SNKitTests: XCTestCase {
     var mockSession: MockURLSession!
     
     override func setUpWithError() throws {
-        mockSession = MockURLSession()
+        mockSession = MockURLSession.createMockSession()
         snkit = SNKit(configuration: Configuration(), session: mockSession)
     }
     
