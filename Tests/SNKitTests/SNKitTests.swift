@@ -70,7 +70,7 @@ final class SNKitTests: XCTestCase {
         wait(for: [expectation], timeout: 1.0)
     }
     
-    //MARK: ImageProcessor - Resizing
+    //MARK: ImageProcessor - Resizing/DownSamle
     func testImageProcessing_Resize() {
         let expectation = XCTestExpectation(description: "이미지 처리 완료")
         let url = URL(string: "https://example.com/image.jpg")!
