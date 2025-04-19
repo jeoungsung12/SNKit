@@ -19,9 +19,6 @@ let package = Package(
             path: "Sources",
             swiftSettings: [
                 .define("SWIFT_PACKAGE")
-            ],
-            linkerSettings: [
-                .linkedFramework("UIKit")
             ]
         ),
         .testTarget(

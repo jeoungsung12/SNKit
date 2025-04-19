@@ -22,18 +22,7 @@ jobs:
         run: swift --version
       
       - name: Build package
-        run: swift build -v
+        run: swift build -v --build-path .build
       
       - name: Run tests
         run: swift test -v
-        
-      - name: Generate Code Coverage Report
-        run: |
-          swift test --enable-code-coverage
-          xcrun llvm-cov export -format="lcov" .build/debug/SNKitPackageTests.xctest/Contents/MacOS/SNKitPackageTests -instr-profile .build/debug/codecov/default.profdata > coverage.lcov || true
-      
-      - name: Upload Coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage.lcov
-          fail_ci_if_error: false
