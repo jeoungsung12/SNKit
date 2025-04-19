@@ -13,6 +13,16 @@ final class DiskCache {
     private let lock = NSLock()
     private let capacity: Int
     private let expirationPolicy: ExpirationPolicy
+    private let logger = Logger(subsystem: "com.snkit", category: "DiskCache")
+    
+    enum DiskCacheError: Error {
+        case createDirectoryFailed
+        case saveImageFailed
+        case saveMetadataFailed
+        case loadImageFailed
+        case updateMetadataFailed
+        case removeFileFailed
+    }
     
     init(
         directory: URL?,
@@ -27,7 +37,12 @@ final class DiskCache {
         self.capacity = capacity
         self.expirationPolicy = expirationPolicy
         
-        createDirectoryIfNeed()
+        do {
+            try createDirectoryIfNeed()
+            logger.info("디스크 캐시 초기화: \(cacheDirectory.path)")
+        } catch {
+            logger.error("디스크 캐시 생성 실패: \(error.localizedDescription)")
+        }
     }
     
     func store(_ cacheable: Cacheable) {
@@ -49,13 +64,21 @@ final class DiskCache {
             
             let metadataURL = fileURL.appendingPathExtension("metadata")
             let metadataData = try JSONSerialization.data(withJSONObject: metaData, options: [])
-            try metadataData.write(to: metadataURL)
             
+            let directory = fileURL.deletingLastPathComponent()
+            if !fileManager.fileExists(atPath: directory.path) {
+                try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            }
+            
+            try metadataData.write(to: metadataURL)
             try data.write(to: fileURL)
             
-            removeFilesIfNeeded()
+            logger.debug("디스크 캐시에 저장 성공: \(key)")
+            
+            try removeFilesIfNeeded()
         } catch {
-            print("디스크 캐시 저장 실패")
+            logger.error("디스크 캐시 저장 실패: \(error.localizedDescription)")
+            throw DiskCacheError.saveImageFailed
         }
     }
     
@@ -67,35 +90,46 @@ final class DiskCache {
         defer { lock.unlock() }
         
         guard fileManager.fileExists(atPath: fileURL.path) else {
+            logger.debug("디스크 캐시에서 파일을 찾을 수 없음: \(identifier)")
             return nil
         }
         
         guard fileManager.fileExists(atPath: metadataURL.path) else {
+            logger.debug("메타데이터를 찾을 수 없음: \(identifier)")
             try? fileManager.removeItem(at: fileURL)
             return nil
         }
         
-        if let metadata = try? Data(contentsOf: metadataURL),
-           let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any],
-           let createdAt = info["createdAt"] as? TimeInterval {
+        do {
+            if let metadata = try? Data(contentsOf: metadataURL),
+               let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any],
+               let createdAt = info["createdAt"] as? TimeInterval {
+                
+                let creationDate = Date(timeIntervalSince1970: createdAt)
+                let currentDate = Date()
+                
+                if expirationPolicy.isExpired(createdAt: creationDate, currentDate: currentDate) {
+                    logger.debug("캐시에서 만료됨: \(identifier)")
+                    try? fileManager.removeItem(at: fileURL)
+                    try? fileManager.removeItem(at: metadataURL)
+                    return nil
+                }
+                
+                try updateAccessTime(for: metadataURL, info: info)
+            }
             
-            let creationDate = Date(timeIntervalSince1970: createdAt)
-            let currentDate = Date()
-            
-            if expirationPolicy.isExpired(createdAt: creationDate, currentDate: currentDate) {
-                try? fileManager.removeItem(at: fileURL)
-                try? fileManager.removeItem(at: metadataURL)
+            let data = try Data(contentsOf: fileURL)
+            guard let image = UIImage(data: data) else {
+                logger.error("유효하지 않은 데이터: \(identifier)")
+                try fileManager.removeItem(at: fileURL)
+                try fileManager.removeItem(at: metadataURL)
                 return nil
             }
             
-            updateAccessTime(for: metadataURL, info: info)
-        }
-        
-        do {
-            let data = try Data(contentsOf: fileURL)
-            return UIImage(data: data)
+            logger.debug("디스크 캐시 - 이미지 조회 성공: \(identifier)")
+            return image
         } catch {
-            print("디스크 이미지 로딩 실패!")
+            logger.error("디스크 캐시 - 이미지 조회 실패: \(error.localizedDescription)")
             try? fileManager.removeItem(at: fileURL)
             try? fileManager.removeItem(at: metadataURL)
             return nil
@@ -110,13 +144,15 @@ final class DiskCache {
             let metadataData = try JSONSerialization.data(withJSONObject: updatedInfo, options: [])
             try metadataData.write(to: metadataURL)
         } catch {
-            print("메타데이터 업데이트 실패")
+            logger.error("메타데이터 업데이트 실패: \(error.localizedDescription)")
+            throw DiskCacheError.updateMetadataFailed
         }
     }
     
     func retrieveCacheable(with identifier: String) -> Cacheable? {
         guard let image = retrieve(with: identifier),
               let url = URL(string: identifier) else {
+            logger.error("이미지 조회 실패")
             return nil
         }
         
@@ -126,6 +162,9 @@ final class DiskCache {
         if let metadata = try? Data(contentsOf: metadataURL),
            let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any] {
             eTag = info["eTag"] as? String
+        } else {
+            logger.error("메타데이터 조회 실패")
+            DiskCacheError.loadImageFailed
         }
         
         return CacheableImage(image: image, imageURL: url, identifier: identifier, eTag: eTag)
@@ -167,7 +206,8 @@ extension DiskCache {
             do {
                 try fileManager.createDirectory(at: cacheDirectory, withIntermediateDirectories: true, attributes: nil)
             } catch {
-                print("캐시 디렉토리 생성 에러")
+                logger.error("캐시 디렉토리 생성 에러: \(error.localizedDescription)")
+                throw DiskCacheError.createDirectoryFailed
             }
         }
     }
