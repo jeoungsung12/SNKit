@@ -51,13 +51,26 @@ final class SNKitTests: XCTestCase {
     func testLoadImage_ForceDownload_DownloadsImage() {
         let expectation = XCTestExpectation(description: "이미지 다운로드 완료")
         let url = URL(string: "https://example.com/test.jpg")!
-        let testImage = UIImage(systemName: "star")!
+        let testImage = UIGraphicsImageRenderer(size: CGSize(width: 50, height: 50)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 50, height: 50))
+        }
+        
         let mockData = testImage.jpegData(compressionQuality: 1.0)!
         
-        mockSession.mockResponse = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+        mockSession.mockResponse = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: ["ETag": "test-etag"]
+        )
         mockSession.mockData = mockData
+        mockSession.mockError = nil
         
-        snkit.loadImage(from: url, cacheOption: .forceDownload) { result in
+        snkit.loadImage(
+            from: url,
+            cacheOption: .forceDownload
+        ) { result in
             switch result {
             case .success(let image):
                 XCTAssertNotNil(image)

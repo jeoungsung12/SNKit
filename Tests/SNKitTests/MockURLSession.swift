@@ -26,10 +26,17 @@ final class MockURLSession: URLSession, @unchecked Sendable {
         completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void
     ) -> URLSessionDataTask {
         let task = MockDataTask.createMockTask()
-        (task as! MockDataTask).configure(mockData: mockData,
-                                          mockResponse: mockResponse,
-                                          mockError: mockError,
-                                          completionHandler: completionHandler)
+        (task as! MockDataTask).configure(
+            mockData: mockData,
+            mockResponse: mockResponse ?? HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["ETag": "test-etag"]
+            ),
+            mockError: mockError,
+            completionHandler: completionHandler
+        )
         return task
     }
     
@@ -38,10 +45,17 @@ final class MockURLSession: URLSession, @unchecked Sendable {
         completionHandler: @escaping (Data?, URLResponse?, Error?) -> Void
     ) -> URLSessionDataTask {
         let task = MockDataTask.createMockTask()
-        (task as! MockDataTask).configure(mockData: mockData,
-                                          mockResponse: mockResponse,
-                                          mockError: mockError,
-                                          completionHandler: completionHandler)
+        (task as! MockDataTask).configure(
+            mockData: mockData,
+            mockResponse: mockResponse ?? HTTPURLResponse(
+                url: request.url!,
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: ["ETag": "test-etag"]
+            ),
+            mockError: mockError,
+            completionHandler: completionHandler
+        )
         return task
     }
 }
