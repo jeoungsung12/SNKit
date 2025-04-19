@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [ develop, main ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v1
+        with:
+          swift-version: '5.9'
+      
+      - name: Show Swift version
+        run: swift --version
+      
+      - name: Build package
+        run: swift build -v
+      
+      - name: Run tests
+        run: swift test -v
+      
+      - name: Install SwiftLint
+        run: brew install swiftlint
+      
+      - name: Run SwiftLint
+        run: swiftlint lint --strict || true
+      
+      - name: Generate Code Coverage Report
+        run: |
+          swift test --enable-code-coverage
+          xcrun llvm-cov export -format="lcov" .build/debug/SNKitPackageTests.xctest/Contents/MacOS/SNKitPackageTests -instr-profile .build/debug/codecov/default.profdata > coverage.lcov || true
+      
+      - name: Upload Coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.lcov
+          fail_ci_if_error: false
