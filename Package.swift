@@ -19,7 +19,7 @@ let package = Package(
             name: "SNKit",
             dependencies: [],
             path: "Sources",
-            publicHeaderPath: "Sources",
+            publicHeadersPath: "Sources", // publicHeaderPath -> publicHeadersPath
             swiftSettings: [
                 .define("SWIFT_PACKAGE")
             ]
