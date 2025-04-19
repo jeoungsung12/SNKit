@@ -45,8 +45,10 @@ final class DiskCache {
         }
     }
     
-    func store(_ cacheable: Cacheable) {
-        guard let image = cacheable.image, let data = image.jpegData(compressionQuality: 0.8) else { return }
+    func store(_ cacheable: Cacheable) throws {
+        guard let image = cacheable.image, let data = image.jpegData(compressionQuality: 0.8) else {
+            throw DiskCacheError.saveImageFailed
+        }
         let key = cacheable.identifier
         let fileURL = cacheURL(for: key)
         
@@ -136,7 +138,7 @@ final class DiskCache {
         }
     }
     
-    private func updateAccessTime(for metadataURL: URL, info: [String: Any]) {
+    private func updateAccessTime(for metadataURL: URL, info: [String: Any]) throws {
         var updatedInfo = info
         updatedInfo["lastAccessedAt"] = Date().timeIntervalSince1970
         
@@ -164,7 +166,6 @@ final class DiskCache {
             eTag = info["eTag"] as? String
         } else {
             logger.error("메타데이터 조회 실패")
-            DiskCacheError.loadImageFailed
         }
         
         return CacheableImage(image: image, imageURL: url, identifier: identifier, eTag: eTag)
@@ -198,7 +199,7 @@ extension DiskCache {
         return cacheDirectory.appendingPathComponent(hashedKey, isDirectory: false)
     }
     
-    private func createDirectoryIfNeed() {
+    private func createDirectoryIfNeed() throws {
         lock.lock()
         defer { lock.unlock() }
         

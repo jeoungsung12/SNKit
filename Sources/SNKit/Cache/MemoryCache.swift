@@ -26,6 +26,9 @@ final class CacheItem: NSObject {
 
 final class MemoryCache {
     private let cache = NSCache<NSString, CacheItem>()
+    private let logger = Logger(subsystem: "com.snkit", category: "MemoryCache")
+    private let lock = NSLock()
+    private var cachedItems = [String:Date]()
     
     init(capacity: Int) {
         cache.totalCostLimit = capacity
@@ -36,6 +39,8 @@ final class MemoryCache {
             name: UIApplication.didReceiveMemoryWarningNotification,
             object: nil
         )
+        
+        logger.info("메모리캐시 용량 초기화: \(capacity) bytes")
     }
     
     deinit {
@@ -54,12 +59,37 @@ final class MemoryCache {
             createdAt: Date()
         )
         
-        let cost = Int(image.size.width * image.size.height * 4)
+        let cost = calculateCost(for: image)
+        
+        lock.lock()
         cache.setObject(cacheItem, forKey: key, cost: cost)
+        cachedItems[cacheable.identifier] = Date()
+        lock.unlock()
+        
+        logger.debug("메모리캐시 - 저장 성공: \(cacheable.identifier), 크기: \(cost) bytes")
+    }
+    
+    private func calculateCost(for image: UIImage) -> Int {
+        let bytesPerPixel = 4
+        let width = Int(image.size.width)
+        let height = Int(image.size.height)
+        let scale = Int(image.scale)
+        
+        return width * height * bytesPerPixel * scale * scale
     }
     
     func retrieve(with identifier: String) -> UIImage? {
-        return cache.object(forKey: identifier as NSString)?.image
+        lock.lock()
+        defer { lock.unlock() }
+        
+        guard let cacheItem = cache.object(forKey: identifier as NSString) else {
+            return nil
+        }
+        
+        cachedItems[identifier] = Date()
+        logger.debug("캐시 히트: \(identifier)")
+        
+        return cacheItem.image
     }
     
     func retrieveCacheable(with identifier: String) -> Cacheable? {
@@ -86,8 +116,25 @@ final class MemoryCache {
     
     @objc
     private func didReceiveMemoryWarning() {
-        print(#function, self)
-        removeAll()
+        logger.warning("메모리 경고 - 메모리 최적화 필요")
+        intelligentlyClearCache(percentToRemove: 0.5)
+    }
+    
+    private func intelligentlyClearCache(percentToRemove: Double) {
+        lock.lock()
+        defer { lock.unlock() }
+        
+        let sortedItems = cachedItems.sorted { $0.value < $1.value }
+        let removeCount = Int(Double(sortedItems.count) * percentToRemove)
+        
+        if removeCount > 0 {
+            for i in 0..<removeCount {
+                let item = sortedItems[i]
+                cache.removeObject(forKey: item.key as NSString)
+                cachedItems.removeValue(forKey: item.key)
+            }
+            logger.info("\(removeCount)개 - 메모리 캐시에서 삭제")
+        }
     }
 }
 
