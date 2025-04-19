@@ -23,6 +23,5 @@ let package = Package(
             name: "SNKitTests",
             dependencies: ["SNKit"],
             path: "Tests/SNKitTests")
-    ],
-    swiftLanguageModes: [.v5]
+    ]
 )
