@@ -12,6 +12,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
       
+      - name: Install Xcode Command Line Tools
+        run: xcode-select --install
+      
       - name: Set up Swift
         uses: swift-actions/setup-swift@v1
         with:
@@ -35,3 +38,7 @@ jobs:
           prerelease: false
           body: |
             SNKit ${{ github.ref_name }} 릴리스
+            
+            ### 주요 변경사항
+            - 이미지 캐싱 라이브러리 업데이트
+            - 안정성 및 성능 개선
