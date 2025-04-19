@@ -33,6 +33,7 @@ final class ImageDownloader: @unchecked Sendable {
     private let cacheManager: CacheManager
     private let eTagHandler: ETagHandler
     private let dispatchQueue = DispatchQueue(label: "com.snkit.imagedownloader", qos: .utility, attributes: .concurrent)
+    private let logger = Logger(subsystem: "com.snkit", category: "ImageDownloader")
     
     private var activeTasks: [String: URLSessionDataTask] = [:]
     private let taskLock = NSLock()
@@ -44,6 +45,7 @@ final class ImageDownloader: @unchecked Sendable {
         self.session = session
         self.cacheManager = cacheManager
         self.eTagHandler = ETagHandler(session: session, cacheManager: cacheManager)
+        logger.info("이미지 다운로더 초기화")
     }
     
     func downloadImage(
@@ -56,6 +58,7 @@ final class ImageDownloader: @unchecked Sendable {
         
         taskLock.lock()
         if let existingTask = activeTasks[identifier], existingTask.state == .running {
+            logger.debug("이미지 다운로드 진행중..: \(identifier)")
             taskLock.unlock()
             return
         }
@@ -64,6 +67,7 @@ final class ImageDownloader: @unchecked Sendable {
         switch option {
         case .cacheFirst:
             if let cachedImage = cacheManager.retrieveImage(with: identifier) {
+                logger.debug("캐시 히트: \(identifier)")
                 DispatchQueue.main.async {
                     completion(.cached(cachedImage))
                 }
@@ -74,6 +78,7 @@ final class ImageDownloader: @unchecked Sendable {
         case .eTagValidation:
             if let cachedImage = cacheManager.retrieveImage(with: identifier),
                let cachedETag = cacheManager.retrieveETag(with: identifier) {
+                logger.debug("캐시 히트(ETag): \(identifier)")
                 validateWithETag(
                     url: url,
                     cachedImage: cachedImage,
@@ -81,10 +86,12 @@ final class ImageDownloader: @unchecked Sendable {
                     completion: completion
                 )
             } else {
+                logger.debug("캐시 미스(ETag): \(identifier)")
                 downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
             }
             
         case .forceDownload:
+            logger.debug("이미지 강제 다운로드: \(identifier)")
             downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
         }
     }
@@ -135,13 +142,14 @@ extension ImageDownloader {
                 [weak self] data,
                 response,
                 error in
-                
+                logger.debug("이미지 다운로드: \(identifier)")
                 self?.taskLock.lock()
                 self?.activeTasks.removeValue(forKey: identifier)
                 self?.taskLock.unlock()
                 
                 if let error = error {
                     DispatchQueue.main.async {
+                        logger.debug("이미지 다운로드 실패: \(identifier)")
                         completion(.failure(DownloadError.networkError(error)))
                     }
                     return
@@ -149,6 +157,7 @@ extension ImageDownloader {
                 
                 guard let data = data,
                       !data.isEmpty else {
+                    logger.debug("빈 데이터: \(identifier)")
                     DispatchQueue.main.async {
                         completion(.failure(DownloadError.invalidData))
                     }
@@ -157,6 +166,7 @@ extension ImageDownloader {
                 
                 guard let httpResponse = response as? HTTPURLResponse,
                       (200...299).contains(httpResponse.statusCode) else {
+                    logger.debug("이미지 다운로드 실패: \(response)")
                     DispatchQueue.main.async {
                         completion(.failure(DownloadError.invalidResponse))
                     }
@@ -164,6 +174,7 @@ extension ImageDownloader {
                 }
                 
                 guard let image = UIImage(data: data) else {
+                    logger.debug("데이터 to 이미지 변환 실패")
                     DispatchQueue.main.async {
                         completion(.failure(DownloadError.invalidData))
                     }
@@ -179,6 +190,7 @@ extension ImageDownloader {
                 }
                 
                 guard let url = URL(string: identifier) else {
+                    logger.debug("유효하지 않는 URL")
                     DispatchQueue.main.async {
                         completion(.failure(DownloadError.invalidURL))
                     }
@@ -193,6 +205,7 @@ extension ImageDownloader {
                 )
                 
                 self?.cacheManager.storeImage(with: cacheable, option: storageOption)
+                self?.logger.info("이미지 다운로드, 캐시 저장 성공: \(identifier)")
                 
                 DispatchQueue.main.async {
                     completion(.success(image))
