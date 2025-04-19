@@ -23,7 +23,7 @@ final class SNKitTests: XCTestCase {
         mockSession = nil
     }
     
-    //MARK: CacheFirst
+    //MARK: CacheFirst - Hybrid
     func testLoadImage_CacheFirst_ReturnsImageFromCache() {
         let expectation = XCTestExpectation(description: "이미지 로드 완료")
         let url = URL(string: "https://example.com/test.jpg")!
