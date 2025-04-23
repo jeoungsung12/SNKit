@@ -11,6 +11,7 @@ SNKit은 iOS 앱을 위한 효율적인 이미지 캐싱 및 다운로드 라이
 - **쉬운 사용법**: UIImageView 확장을 통한 간편한 이미지 로딩
 - **만료 정책**: 캐시 항목에 대한 다양한 만료 정책 설정 가능
 - **커스터마이징**: 메모리 및 디스크 캐시 용량, 만료 정책 등 커스터마이징 가능
+- **SwiftUI 지원**: iOS 13.0 이상에서 SwiftUI 환경의 이미지 로딩 지원
 
 ## 설치 방법
 
@@ -25,7 +26,7 @@ dependencies: [
 
 ## 사용 방법
 
-### 기본 사용법
+### UIKit 사용법
 
 ```swift
 import SNKit
@@ -40,6 +41,33 @@ SNKit.shared.loadImage(from: imageURL) { result in
         // 이미지 사용
     case .failure(let error):
         // 에러 처리
+    }
+}
+```
+
+### SwiftUI 사용법
+
+```swift
+import SwiftUI
+import SNKit
+
+struct ContentView: View {
+    let imageURL = URL(string: "https://example.com/image.jpg")!
+    
+    var body: some View {
+        // 기본 사용법
+        SNImage(url: imageURL)
+            .aspectRatio(contentMode: .fit)
+            .frame(height: 200)
+            
+        // 옵션 지정
+        SNImage(
+            url: imageURL,
+            cacheOption: .eTagValidation,
+            storageOption: .hybrid,
+            processingOption: .resize(CGSize(width: 300, height: 200))
+        )
+        .frame(height: 200)
     }
 }
 ```
@@ -100,6 +128,9 @@ SNKit.shared.clearCache(option: .memory)
 
 // 디스크 캐시만 제거
 SNKit.shared.clearCache(option: .disk)
+
+// SwiftUI에서 캐시 제거
+SNKit.clearCache(for: imageURL)
 ```
 
 ### 커스텀 설정
@@ -145,6 +176,7 @@ SNKit은 다음과 같은 구성 요소로 이루어져 있습니다:
 - **ImageDownloader**: 이미지 다운로드 및 캐싱 처리
 - **ETagHandler**: ETag 기반 이미지 검증
 - **ImageProcessor**: 이미지 리사이징 및 다운샘플링 처리
+- **SwiftUI 지원**: SwiftUI에서 이미지 로딩을 위한 `SNImage` 컴포넌트 제공
 
 ## 요구 사항
 
