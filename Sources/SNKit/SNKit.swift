@@ -108,3 +108,13 @@ public final class SNKit {
         cacheManager.removeImage(with: url.absoluteString, option: option)
     }
 }
+
+public extension SNKit {
+    static func clearCache(for url: URL? = nil, option: StorageOption = .hybrid) {
+        if let specificURL = url {
+            SNKit.shared.removeCache(for: specificURL, option: option)
+        } else {
+            SNKit.shared.clearCache(option: option)
+        }
+    }
+}
