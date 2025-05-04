@@ -7,6 +7,27 @@
 
 import UIKit
 
+struct CacheScore: Comparable {
+    let identifier: String
+    var lastAccessTime: Date
+    var accessCount: Int = 0
+    
+    var score: Double {
+        let recencyScore = -Date().timeIntervalSince(lastAccessTime)
+        let frequencyScore = Double(accessCount)
+        
+        return recencyScore * 0.7 + frequencyScore * 0.3
+    }
+    
+    static func < (lhs: CacheScore, rhs: CacheScore) -> Bool {
+        return lhs.score < rhs.score
+    }
+    
+    static func == (lhs: CacheScore, rhs: CacheScore) -> Bool {
+        return lhs.identifier == rhs.identifier
+    }
+}
+
 final class CacheItem: NSObject {
     let image: UIImage
     let identifier: String
@@ -28,7 +49,7 @@ final class MemoryCache {
     private let cache = NSCache<NSString, CacheItem>()
     private let logger = Logger(subsystem: "com.snkit", category: "MemoryCache")
     private let lock = NSLock()
-    private var cachedItems = [String:Date]()
+    private var cacheScores = [String: CacheScore]()
     
     init(capacity: Int) {
         cache.totalCostLimit = capacity
@@ -63,7 +84,19 @@ final class MemoryCache {
         
         lock.lock()
         cache.setObject(cacheItem, forKey: key, cost: cost)
-        cachedItems[cacheable.identifier] = Date()
+        
+        if var score = cacheScores[cacheable.identifier] {
+            score.lastAccessTime = Date()
+            score.accessCount += 1
+            cacheScores[cacheable.identifier] = score
+        } else {
+            cacheScores[cacheable.identifier] = CacheScore(
+                identifier: cacheable.identifier,
+                lastAccessTime: Date(),
+                accessCount: 1
+            )
+        }
+        
         lock.unlock()
         
         logger.debug("메모리캐시 - 저장 성공: \(cacheable.identifier), 크기: \(cost) bytes")
@@ -86,8 +119,19 @@ final class MemoryCache {
             return nil
         }
         
-        cachedItems[identifier] = Date()
-        logger.debug("캐시 히트: \(identifier)")
+        if var score = cacheScores[identifier] {
+            score.lastAccessTime = Date()
+            score.accessCount += 1
+            cacheScores[identifier] = score
+        } else {
+            cacheScores[identifier] = CacheScore(
+                identifier: identifier,
+                lastAccessTime: Date(),
+                accessCount: 1
+            )
+        }
+        
+        logger.debug("캐시 히트: \(identifier), 접근 횟수: \(cacheScores[identifier]?.accessCount ?? 1)")
         
         return cacheItem.image
     }
@@ -96,6 +140,12 @@ final class MemoryCache {
         guard let cacheItem = cache.object(forKey: identifier as NSString),
               let url = URL(string: identifier) else {
             return nil
+        }
+        
+        if var score = cacheScores[identifier] {
+            score.lastAccessTime = Date()
+            score.accessCount += 1
+            cacheScores[identifier] = score
         }
         
         return CacheableImage(
@@ -107,11 +157,19 @@ final class MemoryCache {
     }
     
     func remove(with identifier: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        
         cache.removeObject(forKey: identifier as NSString)
+        cacheScores.removeValue(forKey: identifier)
     }
     
     func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        
         cache.removeAllObjects()
+        cacheScores.removeAll()
     }
     
     @objc
@@ -124,18 +182,16 @@ final class MemoryCache {
         lock.lock()
         defer { lock.unlock() }
         
-        let sortedItems = cachedItems.sorted { $0.value < $1.value }
-        let removeCount = Int(Double(sortedItems.count) * percentToRemove)
+        let sortedScores = cacheScores.values.sorted()
+        let removeCount = Int(Double(sortedScores.count) * percentToRemove)
         
         if removeCount > 0 {
             for i in 0..<removeCount {
-                let item = sortedItems[i]
-                cache.removeObject(forKey: item.key as NSString)
-                cachedItems.removeValue(forKey: item.key)
+                let scoreItem = sortedScores[i]
+                cache.removeObject(forKey: scoreItem.identifier as NSString)
+                cacheScores.removeValue(forKey: scoreItem.identifier)
             }
-            logger.info("\(removeCount)개 - 메모리 캐시에서 삭제")
+            logger.info("\(removeCount)개 항목 제거됨 - 스코어 기반 캐시 최적화")
         }
     }
 }
-
-
