@@ -74,7 +74,7 @@ final class ImageDownloader: @unchecked Sendable {
                 }
                 return
             }
-            downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
+            downloadAndCacheImage(with: url, headers: headers, identifier: identifier, storageOption: storageOption, completion: completion)
             
         case .eTagValidation:
             if let cachedImage = cacheManager.retrieveImage(with: identifier),
@@ -89,12 +89,12 @@ final class ImageDownloader: @unchecked Sendable {
                 )
             } else {
                 logger.debug("캐시 미스(ETag): \(identifier)")
-                downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
+                downloadAndCacheImage(with: url, headers: headers, identifier: identifier, storageOption: storageOption, completion: completion)
             }
             
         case .forceDownload:
             logger.debug("이미지 강제 다운로드: \(identifier)")
-            downloadAndCacheImage(with: url, identifier: identifier, storageOption: storageOption, completion: completion)
+            downloadAndCacheImage(with: url, headers: headers, identifier: identifier, storageOption: storageOption, completion: completion)
         }
     }
     
@@ -113,6 +113,7 @@ extension ImageDownloader {
         dispatchQueue.async { [weak self] in
             self?.eTagHandler.validateFetchImage(
                 with: url,
+                headers: headers,
                 cachedImage: cachedImage,
                 cachedETag: cachedETag
             ) { result in
