@@ -50,6 +50,7 @@ final class ImageDownloader: @unchecked Sendable {
     
     func downloadImage(
         with url: URL,
+        headers: RequestHeaders? = nil,
         storageOption: StorageOption = .hybrid,
         option: CacheOption = .cacheFirst ,
         completion: @escaping @Sendable (DownloadResult?) -> Void
@@ -81,6 +82,7 @@ final class ImageDownloader: @unchecked Sendable {
                 logger.debug("캐시 히트(ETag): \(identifier)")
                 validateWithETag(
                     url: url,
+                    headers: headers,
                     cachedImage: cachedImage,
                     cachedETag: cachedETag,
                     completion: completion
@@ -103,6 +105,7 @@ extension ImageDownloader {
     
     private func validateWithETag(
         url: URL,
+        headers: RequestHeaders? = nil,
         cachedImage: UIImage,
         cachedETag: String,
         completion: @escaping @Sendable (DownloadResult) -> Void
@@ -133,12 +136,21 @@ extension ImageDownloader {
     
     private func downloadAndCacheImage(
         with url: URL,
+        headers: RequestHeaders? = nil,
         identifier: String,
         storageOption: StorageOption = .hybrid,
         completion: @escaping @Sendable (DownloadResult) -> Void
     ) {
         dispatchQueue.async { [weak self] in
-            let task = self?.session.dataTask(with: url) {
+            var request = URLRequest(url: url)
+            
+            if let requestHeaders = headers {
+                for (key, value) in requestHeaders.headers {
+                    request.setValue(value, forHTTPHeaderField: key)
+                }
+            }
+            
+            let task = self?.session.dataTask(with: request) {
                 [weak self] data,
                 response,
                 error in
@@ -201,7 +213,8 @@ extension ImageDownloader {
                     image: image,
                     imageURL: url,
                     identifier: identifier,
-                    eTag: eTag
+                    eTag: eTag,
+                    headers: headers
                 )
                 
                 self?.cacheManager.storeImage(with: cacheable, option: storageOption)
