@@ -24,6 +24,7 @@ struct ActivityIndicator: UIViewRepresentable {
 
 public struct SNImage: View {
     private let url: URL
+    private let headers: RequestHeaders?
     private let cacheOption: CacheOption
     private let storageOption: StorageOption
     private let processingOption: ImageProcessingOption
@@ -34,11 +35,13 @@ public struct SNImage: View {
     
     public init(
         url: URL,
+        headers: RequestHeaders? = nil,
         cacheOption: CacheOption = .cacheFirst,
         storageOption: StorageOption = .hybrid,
         processingOption: ImageProcessingOption = .none
     ) {
         self.url = url
+        self.headers = headers
         self.cacheOption = cacheOption
         self.storageOption = storageOption
         self.processingOption = processingOption
@@ -78,6 +81,7 @@ public struct SNImage: View {
         
         SNKit.shared.loadImage(
             from: url,
+            headers: headers,
             cacheOption: cacheOption,
             storageOption: storageOption,
             processingOption: processingOption

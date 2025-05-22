@@ -11,6 +11,7 @@ public extension UIImageView {
     
     func snSetImage(
         with url: URL,
+        headers: RequestHeaders? = nil,
         cacheOption: CacheOption = .cacheFirst,
         storageOption: StorageOption? = nil,
         processingOption: ImageProcessingOption = .none,
@@ -39,6 +40,7 @@ public extension UIImageView {
         
         SNKit.shared.loadImage(
             from: url,
+            headers: headers,
             cacheOption: cacheOption,
             storageOption: storageOption,
             processingOption: processingOption

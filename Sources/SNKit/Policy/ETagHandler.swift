@@ -27,13 +27,18 @@ final class ETagHandler: @unchecked Sendable {
     
     func validateFetchImage(
         with url: URL,
+        headers: RequestHeaders? = nil,
         cachedImage: UIImage,
         cachedETag: String,
         completion: @escaping @Sendable (ETagValidationResult) -> Void
     ) {
         var request = URLRequest(url: url)
         request.setValue(cachedETag, forHTTPHeaderField: "If-None-Match")
-        
+        if let requestHeaders = headers {
+            for (key, value) in requestHeaders.headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
         let task = session.dataTask(with: request) {
             [weak self] data,
             response,

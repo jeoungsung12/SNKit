@@ -47,13 +47,10 @@ public final class CacheManager: @unchecked Sendable {
     func retrieveImage(with identifier: String, option: StorageOption = .hybrid) -> UIImage? {
         switch option {
         case .memory:
-            //1. 메모리 캐시 Hit
             return memoryCache.retrieve(with: identifier)
         case .disk:
-            //2. 디스크 캐시 Hit
             return diskCache.retrieve(with: identifier)
         case .hybrid:
-            //3. 하이브리드 캐시 Hit
             return hybridCache.retrieve(with: identifier)
         }
     }
@@ -61,10 +58,8 @@ public final class CacheManager: @unchecked Sendable {
     func removeImage(with identifier: String, option: StorageOption = .hybrid) {
         switch option {
         case .memory:
-            //1. 메모리 캐시 삭제
             memoryCache.remove(with: identifier)
         case .disk:
-            //2. 디스크 캐시 삭제
             DispatchQueue.global(qos: .utility).async { [weak self] in
                 self?.diskCache.remove(with: identifier)
             }
@@ -87,7 +82,6 @@ public final class CacheManager: @unchecked Sendable {
     }
 }
 
-//MARK: ETag
 extension CacheManager {
     
     func storeETag(_ eTag: String, with identifier: String, option: StorageOption = .hybrid) {

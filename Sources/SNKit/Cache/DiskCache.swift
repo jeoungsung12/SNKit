@@ -58,7 +58,8 @@ final class DiskCache {
         do {
             var metaData: [String:Any] = [
                 "createdAt": Date().timeIntervalSince1970,
-                "lastAccessedAt": Date().timeIntervalSince1970
+                "lastAccessedAt": Date().timeIntervalSince1970,
+                "accessCount": 1
             ]
             if let eTag = cacheable.eTag {
                 metaData["eTag"] = eTag
@@ -117,7 +118,7 @@ final class DiskCache {
                     return nil
                 }
                 
-                try updateAccessTime(for: metadataURL, info: info)
+                try updateAccessMetadata(for: metadataURL, info: info)
             }
             
             let data = try Data(contentsOf: fileURL)
@@ -138,9 +139,12 @@ final class DiskCache {
         }
     }
     
-    private func updateAccessTime(for metadataURL: URL, info: [String: Any]) throws {
+    private func updateAccessMetadata(for metadataURL: URL, info: [String: Any]) throws {
         var updatedInfo = info
         updatedInfo["lastAccessedAt"] = Date().timeIntervalSince1970
+        
+        let accessCount = (info["accessCount"] as? Int) ?? 0
+        updatedInfo["accessCount"] = accessCount + 1
         
         do {
             let metadataData = try JSONSerialization.data(withJSONObject: updatedInfo, options: [])
@@ -235,6 +239,7 @@ extension DiskCache {
                 
                 let metadataURL = fileURL.appendingPathExtension("metadata")
                 var lastAccessTime: Date = Date.distantPast
+                var accessCount: Int = 0
                 
                 if let metadata = try? Data(contentsOf: metadataURL),
                    let info = try? JSONSerialization.jsonObject(with: metadata, options: []) as? [String:Any] {
@@ -243,12 +248,20 @@ extension DiskCache {
                     } else if let createdTime = info["createdAt"] as? TimeInterval {
                         lastAccessTime = Date(timeIntervalSince1970: createdTime)
                     }
+                    
+                    accessCount = (info["accessCount"] as? Int) ?? 0
                 }
+                
+                let recencyScore = -Date().timeIntervalSince(lastAccessTime)
+                let frequencyScore = Double(accessCount)
+                let score = recencyScore * 0.7 + frequencyScore * 0.3
                 
                 fileAttributes.append([
                     "url": fileURL,
                     "size": fileSize,
                     "accessDate": lastAccessTime,
+                    "accessCount": accessCount,
+                    "score": score,
                     "metadataURL": metadataURL
                 ])
             }
@@ -256,7 +269,7 @@ extension DiskCache {
         
         if totalSize > capacity {
             let sortedFiles = fileAttributes.sorted { (file1, file2) -> Bool in
-                return (file1["accessDate"] as! Date) < (file2["accessDate"] as! Date)
+                return (file1["score"] as! Double) < (file2["score"] as! Double)
             }
             
             var currentSize = totalSize
@@ -272,7 +285,7 @@ extension DiskCache {
                         try fileManager.removeItem(at: metadataURL)
                         currentSize -= (file["size"] as? Int) ?? 0
                     } catch {
-                        print("캐시 파일 삭제 에러")
+                        logger.error("캐시 파일 삭제 에러: \(error.localizedDescription)")
                     }
                 }
             }

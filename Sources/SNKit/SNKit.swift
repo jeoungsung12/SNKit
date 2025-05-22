@@ -41,6 +41,7 @@ public final class SNKit {
     
     public func loadImage(
         from url: URL,
+        headers: RequestHeaders? = nil,
         cacheOption: CacheOption = .cacheFirst,
         storageOption: StorageOption? = nil,
         processingOption: ImageProcessingOption = .none,
@@ -55,7 +56,12 @@ public final class SNKit {
         }
         
         logger.debug("캐시 미스/캐시옵션 지정 X - URL: \(url.absoluteString)")
-        downloader.downloadImage(with: url, storageOption: storageOpt, option: cacheOption) { [weak self] result in
+        downloader.downloadImage(
+            with: url,
+            headers: headers,
+            storageOption: storageOpt,
+            option: cacheOption
+        ) { [weak self] result in
             guard let self = self else { return }
             
             switch result {
