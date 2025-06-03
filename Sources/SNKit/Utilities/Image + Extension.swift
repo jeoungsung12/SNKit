@@ -32,6 +32,8 @@ public struct SNImage: View {
     @State private var image: UIImage?
     @State private var isLoading: Bool = true
     @State private var loadError: Error?
+    @State private var currentTask: ImageLoadingTask?
+    @State private var lastURL: URL?
     
     public init(
         url: URL,
@@ -65,19 +67,46 @@ public struct SNImage: View {
                     )
             }
         }
-        .onAppear(perform: loadImage)
-        .onReceive(Just(url)) { newURL in
-            if newURL != self.url {
-                isLoading = true
-                loadError = nil
-                image = nil
-                loadImage()
-            }
+        .onAppear {
+            checkURLChangeAndLoad()
         }
+        .onReceive(Just(url)) { _ in
+            checkURLChangeAndLoad()
+        }
+        .onDisappear {
+            cancelCurrentTask()
+        }
+    }
+    
+    private func checkURLChangeAndLoad() {
+        if lastURL != url {
+            if lastURL != nil {
+                cancelCurrentTask()
+                resetState()
+            }
+            lastURL = url
+            loadImage()
+        }
+    }
+    
+    private func resetState() {
+        isLoading = true
+        loadError = nil
+        image = nil
+    }
+    
+    private func cancelCurrentTask() {
+        currentTask?.cancel()
+        currentTask = nil
     }
     
     private func loadImage() {
         guard isLoading, image == nil else { return }
+        
+        cancelCurrentTask()
+        
+        let task = ImageLoadingTask(url: url)
+        currentTask = task
         
         SNKit.shared.loadImage(
             from: url,
@@ -86,14 +115,31 @@ public struct SNImage: View {
             storageOption: storageOption,
             processingOption: processingOption
         ) { result in
+            guard self.currentTask === task, task.isValid else {
+                return
+            }
+            
             switch result {
             case .success(let loadedImage):
-                self.image = loadedImage
-                self.loadError = nil
+                DispatchQueue.main.async {
+                    guard self.currentTask === task, task.isValid else {
+                        return
+                    }
+                    
+                    self.image = loadedImage
+                    self.loadError = nil
+                    self.isLoading = false
+                }
             case .failure(let error):
-                self.loadError = error
+                DispatchQueue.main.async {
+                    guard self.currentTask === task, task.isValid else {
+                        return
+                    }
+                    
+                    self.loadError = error
+                    self.isLoading = false
+                }
             }
-            self.isLoading = false
         }
     }
 }
